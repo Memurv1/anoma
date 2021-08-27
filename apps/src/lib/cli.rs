@@ -230,6 +230,7 @@ pub mod cmds {
     #[derive(Debug)]
     pub enum Keypair {
         Generate(Generate),
+        Lookup(Lookup),
     }
 
     impl SubCmd for Keypair {
@@ -237,7 +238,10 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                SubCmd::parse(matches).map_fst(Keypair::Generate)
+                let generate =
+                    SubCmd::parse(matches).map_fst(Keypair::Generate);
+                let lookup = SubCmd::parse(matches).map_fst(Keypair::Lookup);
+                generate.or(lookup)
             })
         }
 
@@ -245,6 +249,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Keypair management, including methods to generate and look-up keys")
                 .subcommand(Generate::def())
+                .subcommand(Lookup::def())
         }
     }
 
@@ -267,6 +272,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Generates a keypair with a given alias")
                 .add_args::<args::Generate>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct Lookup(pub args::Lookup);
+
+    impl SubCmd for Lookup {
+        const CMD: &'static str = "lookup";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Lookup(args::Lookup::parse(matches)), matches))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Searches for a keypair from a public key or an alias")
+                .add_args::<args::Lookup>()
         }
     }
 
@@ -655,6 +682,8 @@ pub mod args {
     const TOKEN: Arg<Address> = arg("token");
     const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
     const ALIAS: ArgOpt<String> = arg_opt("alias");
+    const VALUE: ArgOpt<String> = arg_opt("value");
+    const PUBLIC_KEY: ArgOpt<String> = arg_opt("public-key");
 
     /// Global command arguments
     #[derive(Debug)]
@@ -680,6 +709,49 @@ pub mod args {
     #[derive(Debug)]
     pub struct Generate {
         pub alias: Option<String>,
+    }
+
+    /// Wallet lookup arguments
+    #[derive(Debug)]
+    pub struct Lookup {
+        pub public_key: Option<String>,
+        pub alias: Option<String>,
+        pub value: Option<String>,
+    }
+
+    impl Args for Lookup {
+        fn parse(matches: &ArgMatches) -> Self {
+            let public_key = PUBLIC_KEY.parse(matches);
+            let alias = ALIAS.parse(matches);
+            let value = VALUE.parse(matches);
+
+            Self {
+                public_key,
+                alias,
+                value,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                PUBLIC_KEY
+                    .def()
+                    .about("A public key associated with the keypair")
+                    .conflicts_with("alias")
+                    .conflicts_with("value"),
+            )
+            .arg(
+                ALIAS
+                    .def()
+                    .about("An alias associated with the keypair")
+                    .conflicts_with("value"),
+            )
+            .arg(
+                VALUE
+                    .def()
+                    .about("A public key or alias associated with the keypair"),
+            )
+        }
     }
 
     impl Args for Generate {
