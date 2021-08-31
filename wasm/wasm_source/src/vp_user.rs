@@ -11,6 +11,7 @@ use rust_decimal::prelude::*;
 
 enum KeyType<'a> {
     Token(&'a Address),
+    PoS,
     InvalidIntentSet(&'a Address),
     Unknown,
 }
@@ -19,6 +20,8 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some(address) = token::is_any_token_balance_key(key) {
             Self::Token(address)
+        } else if proof_of_stake::is_pos_key(key) {
+            Self::PoS
         } else if let Some(address) = intent::is_invalid_intent_key(key) {
             Self::InvalidIntentSet(address)
         } else {
@@ -35,13 +38,13 @@ fn validate_tx(
     verifiers: HashSet<Address>,
 ) -> bool {
     log_string(format!(
-        "validate_tx called with user addr: {}, key_changed: {:#?}, \
-         verifiers: {:?}",
+        "validate_tx called with user addr: {}, key_changed: {:?}, verifiers: \
+         {:?}",
         addr, keys_changed, verifiers
     ));
 
     // TODO memoize?
-    let transfer_valid_sig = match SignedTxData::try_from_slice(&tx_data[..]) {
+    let valid_sig = match SignedTxData::try_from_slice(&tx_data[..]) {
         Ok(tx) => {
             let pk = key::ed25519::get(&addr);
             match pk {
@@ -52,35 +55,63 @@ fn validate_tx(
         _ => false,
     };
 
-    log_string(format!("signature valid {}, {}", transfer_valid_sig, &addr));
+    log_string(format!("signature valid {}, {}", valid_sig, &addr));
 
     // TODO memoize?
     // TODO this is not needed for matchmaker, maybe we should have a different
     // VP?
     let valid_intent = check_intent_transfers(&addr, &tx_data[..]);
 
-    log_string(format!("valid transfer {}", valid_intent));
+    log_string(format!("valid intent transfer {}", valid_intent));
 
     for key in keys_changed.iter() {
         let is_valid = match KeyType::from(key) {
-            KeyType::Token(owner) if owner == &addr => {
-                let key = key.to_string();
-                let pre: token::Amount = read_pre(&key).unwrap_or_default();
-                let post: token::Amount = read_post(&key).unwrap_or_default();
-                let change = post.change() - pre.change();
+            KeyType::Token(owner) => {
+                if owner == &addr {
+                    let key = key.to_string();
+                    let pre: token::Amount = read_pre(&key).unwrap_or_default();
+                    let post: token::Amount =
+                        read_post(&key).unwrap_or_default();
+                    let change = post.change() - pre.change();
+                    // debit has to signed, credit doesn't
+                    let valid = !(change < 0 && !valid_sig && !valid_intent);
+                    log_string(format!(
+                        "token key: {}, change: {}, transfer_valid_sig: {}, \
+                         valid_intent: {}, valid modification: {}",
+                        key, change, valid_sig, valid_intent, valid
+                    ));
+                    valid
+                } else {
+                    log_string(format!(
+                        "Token: key {} is not of owner, transfer_valid_sig \
+                         {}, owner: {}, address: {}",
+                        key, valid_sig, owner, addr
+                    ));
+                    valid_sig
+                }
+            }
+            KeyType::PoS => {
+                // Allow the account to be used in PoS
+                let bond_id = proof_of_stake::is_bond_key(key)
+                    .or_else(|| proof_of_stake::is_unbond_key(key));
+                let valid = match bond_id {
+                    Some(bond_id) => {
+                        // Bonds and unbonds changes for this address
+                        // must be signed
+                        (bond_id.source == addr && valid_sig)
+                            || bond_id.source != addr
+                    }
+                    None => {
+                        // Any other PoS changes are allowed without signature
+                        true
+                    }
+                };
                 log_string(format!(
-                    "token key: {}, change: {}, transfer_valid_sig: {}, \
-                     valid_intent: {}, valid modification: {}",
+                    "PoS key {} {}",
                     key,
-                    change,
-                    transfer_valid_sig,
-                    valid_intent,
-                    (change < 0 && (transfer_valid_sig || valid_intent))
-                        || change > 0
+                    if valid { "accepted" } else { "rejected" }
                 ));
-                // debit has to signed, credit doesn't
-                (change < 0 && (transfer_valid_sig || valid_intent))
-                    || change > 0
+                valid
             }
             KeyType::InvalidIntentSet(owner) if owner == &addr => {
                 let key = key.to_string();
@@ -98,24 +129,16 @@ fn validate_tx(
                 log_string(format!(
                     "InvalidIntentSet: key {} is not of owner, \
                      transfer_valid_sig {}, owner: {}, address: {}",
-                    key, transfer_valid_sig, _owner, addr
+                    key, valid_sig, _owner, addr
                 ));
-                transfer_valid_sig
-            }
-            KeyType::Token(_owner) => {
-                log_string(format!(
-                    "Token: key {} is not of owner, transfer_valid_sig {}, \
-                     owner: {}, address: {}",
-                    key, transfer_valid_sig, _owner, addr
-                ));
-                transfer_valid_sig
+                valid_sig
             }
             KeyType::Unknown => {
                 log_string(format!(
                     "Unknown key modified, valid sig {}",
-                    transfer_valid_sig
+                    valid_sig
                 ));
-                transfer_valid_sig
+                valid_sig
             }
         };
         if !is_valid {
