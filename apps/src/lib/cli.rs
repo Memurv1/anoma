@@ -1140,6 +1140,7 @@ pub mod args {
         pub public_key: Option<String>,
         pub alias: Option<String>,
         pub value: Option<String>,
+        pub show_secret: bool,
     }
 
     impl Args for KeyFind {
@@ -1147,11 +1148,13 @@ pub mod args {
             let public_key = PUBLIC_KEY.parse(matches);
             let alias = ALIAS.parse(matches);
             let value = VALUE.parse(matches);
+            let show_secret = SHOW_SECRET.parse(matches);
 
             Self {
                 public_key,
                 alias,
                 value,
+                show_secret,
             }
         }
 
@@ -1174,6 +1177,7 @@ pub mod args {
                     .def()
                     .about("A public key or alias associated with the keypair"),
             )
+            .arg(SHOW_SECRET.def().about("Print the secret key"))
         }
     }
 
