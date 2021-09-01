@@ -231,6 +231,7 @@ pub mod cmds {
     pub enum Keypair {
         Generate(Generate),
         Lookup(Lookup),
+        Export(Export),
     }
 
     impl SubCmd for Keypair {
@@ -241,7 +242,9 @@ pub mod cmds {
                 let generate =
                     SubCmd::parse(matches).map_fst(Keypair::Generate);
                 let lookup = SubCmd::parse(matches).map_fst(Keypair::Lookup);
-                generate.or(lookup)
+                let export = SubCmd::parse(matches).map_fst(Keypair::Export);
+
+                generate.or(lookup).or(export)
             })
         }
 
@@ -250,6 +253,7 @@ pub mod cmds {
                 .about("Keypair management, including methods to generate and look-up keys")
                 .subcommand(Generate::def())
                 .subcommand(Lookup::def())
+                .subcommand(Export::def())
         }
     }
 
@@ -294,6 +298,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Searches for a keypair from a public key or an alias")
                 .add_args::<args::Lookup>()
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct Export(pub args::Export);
+
+    impl SubCmd for Export {
+        const CMD: &'static str = "export";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Export(args::Export::parse(matches)), matches))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Exports a keypair to a file")
+                .add_args::<args::Export>()
         }
     }
 

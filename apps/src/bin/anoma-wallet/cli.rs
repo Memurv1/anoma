@@ -17,6 +17,9 @@ pub fn main() -> Result<()> {
         cmds::AnomaWallet::Keypair(cmds::Keypair::Lookup(cmds::Lookup(
             args,
         ))) => store::fetch(args),
+        cmds::AnomaWallet::Keypair(cmds::Keypair::Export(cmds::Export(
+            args,
+        ))) => store::export_key_to_file(args),
     }
     Ok(())
 }
