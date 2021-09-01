@@ -232,6 +232,7 @@ pub mod cmds {
         Gen(KeyGen),
         Find(KeyFind),
         List(KeyList),
+        Export(Export),
     }
 
     impl SubCmd for Key {
