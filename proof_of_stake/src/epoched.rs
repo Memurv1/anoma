@@ -117,7 +117,7 @@ where
         current_epoch: impl Into<Epoch>,
         params: &PosParams,
     ) -> Self {
-        let mut data = vec![None; Offset::value(params)];
+        let mut data = vec![None; Offset::value(params) as usize];
         data.push(Some(value));
         Self {
             last_update: current_epoch.into(),
@@ -437,7 +437,7 @@ where
             // Sum and clear all the elements before the mid-point
             for next in self.data.iter_mut().take(mid_point) {
                 match (&mut sum, next) {
-                    ( Some(_), next @ Some(_)) => {
+                    (Some(_), next @ Some(_)) => {
                         sum = sum.map(|current_sum| {
                             current_sum + next.take().unwrap()
                         });
