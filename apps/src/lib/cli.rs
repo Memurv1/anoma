@@ -30,6 +30,7 @@ pub mod cmds {
 
     /// Commands for `anoma` binary.
     #[derive(Debug)]
+    #[allow(clippy::large_enum_variant)]
     pub enum Anoma {
         Node(AnomaNode),
         Client(AnomaClient),
@@ -126,9 +127,9 @@ pub mod cmds {
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxUpdateVp(TxUpdateVp),
+        TxInitAccount(TxInitAccount),
         QueryBalance(QueryBalance),
         Intent(Intent),
-        CraftIntent(CraftIntent),
         SubscribeTopic(SubscribeTopic),
     }
 
@@ -137,9 +138,9 @@ pub mod cmds {
             app.subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxUpdateVp::def())
+                .subcommand(TxInitAccount::def())
                 .subcommand(QueryBalance::def())
                 .subcommand(Intent::def())
-                .subcommand(CraftIntent::def())
                 .subcommand(SubscribeTopic::def())
         }
 
@@ -147,19 +148,19 @@ pub mod cmds {
             let tx_custom = SubCmd::parse(matches).map_fst(Self::TxCustom);
             let tx_transfer = SubCmd::parse(matches).map_fst(Self::TxTransfer);
             let tx_update_vp = SubCmd::parse(matches).map_fst(Self::TxUpdateVp);
+            let tx_init_account =
+                SubCmd::parse(matches).map_fst(Self::TxInitAccount);
             let query_balance =
                 SubCmd::parse(matches).map_fst(Self::QueryBalance);
             let intent = SubCmd::parse(matches).map_fst(Self::Intent);
-            let craft_intent =
-                SubCmd::parse(matches).map_fst(Self::CraftIntent);
             let subscribe_topic =
                 SubCmd::parse(matches).map_fst(Self::SubscribeTopic);
             tx_custom
                 .or(tx_transfer)
                 .or(tx_update_vp)
+                .or(tx_init_account)
                 .or(query_balance)
                 .or(intent)
-                .or(craft_intent)
                 .or(subscribe_topic)
         }
     }
@@ -424,6 +425,31 @@ pub mod cmds {
     }
 
     #[derive(Debug)]
+    pub struct TxInitAccount(pub args::TxInitAccount);
+
+    impl SubCmd for TxInitAccount {
+        const CMD: &'static str = "init-account";
+
+        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                (TxInitAccount(args::TxInitAccount::parse(matches)), matches)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Send a signed transaction to create a new established \
+                     account",
+                )
+                .add_args::<args::TxInitAccount>()
+        }
+    }
+
+    #[derive(Debug)]
     pub struct QueryBalance(pub args::QueryBalance);
 
     impl SubCmd for QueryBalance {
@@ -468,28 +494,6 @@ pub mod cmds {
     }
 
     #[derive(Debug)]
-    pub struct CraftIntent(pub args::CraftIntent);
-
-    impl SubCmd for CraftIntent {
-        const CMD: &'static str = "craft-intent";
-
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                (CraftIntent(args::CraftIntent::parse(matches)), matches)
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Craft an intent.")
-                .add_args::<args::CraftIntent>()
-        }
-    }
-
-    #[derive(Debug)]
     pub struct SubscribeTopic(pub args::SubscribeTopic);
 
     impl SubCmd for SubscribeTopic {
@@ -523,6 +527,7 @@ pub mod args {
 
     use anoma::types::address::Address;
     use anoma::types::intent::Exchange;
+    use anoma::types::key::ed25519::PublicKey;
     use anoma::types::token;
     use libp2p::Multiaddr;
 
@@ -534,6 +539,7 @@ pub mod args {
     const BASE_DIR: ArgDefault<PathBuf> =
         arg_default("base-dir", DefaultFn(|| ".anoma".into()));
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
+    const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
@@ -548,25 +554,26 @@ pub mod args {
         }));
     const LEDGER_ADDRESS_OPT: ArgOpt<tendermint::net::Address> =
         LEDGER_ADDRESS.opt();
-    const PEERS: ArgMulti<String> = arg_multi("peers");
-    const TOPIC: Arg<String> = arg("topic");
-    const TOPICS: ArgMulti<String> = TOPIC.multi();
-    // TODO: once we have a wallet, we should also allow to use a key alias
-    // <https://github.com/anoma/anoma/issues/167>
-    const SIGNING_KEY: Arg<Address> = arg("key");
-    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const LEDGER_ADDRESS: Arg<tendermint::net::Address> = arg("ledger-address");
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NODE: Arg<String> = arg("node");
-    const FILE_PATH_OUTPUT: ArgDefault<String> =
-        arg_default("file-path-output", DefaultFn(|| "intent.data".into()));
-    const FILE_PATH_INPUT: Arg<String> = arg("file-path-input");
     const OWNER: ArgOpt<Address> = arg_opt("owner");
+    // TODO: once we have a wallet, we should also allow to use a key alias
+    // <https://github.com/anoma/anoma/issues/167>
+    const PUBLIC_KEY: Arg<PublicKey> = arg("public-key");
+    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
+    // TODO: once we have a wallet, we should also allow to use a key alias
+    // <https://github.com/anoma/anoma/issues/167>
+    const SIGNING_KEY: Arg<Address> = arg("key");
+    const PEERS: ArgMulti<String> = arg_multi("peers");
     const SOURCE: Arg<Address> = arg("source");
     const TARGET: Arg<Address> = arg("target");
-    const TOKEN_OPT: ArgOpt<Address> = TOKEN.opt();
     const TOKEN: Arg<Address> = arg("token");
+    const TOKEN_OPT: ArgOpt<Address> = TOKEN.opt();
+    const TOPIC: Arg<String> = arg("topic");
+    const TOPICS: ArgMulti<String> = TOPIC.multi();
+    const TO_STDOUT: ArgFlag = flag("stdout");
     const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
 
     /// Global command arguments
@@ -670,6 +677,50 @@ pub mod args {
         }
     }
 
+    /// Transaction to initialize a new account
+    #[derive(Debug)]
+    pub struct TxInitAccount {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Address of the source account
+        pub source: Address,
+        /// Path to the VP WASM code file for the new account
+        pub vp_code_path: Option<PathBuf>,
+        /// Public key for the new account
+        pub public_key: PublicKey,
+    }
+
+    impl Args for TxInitAccount {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let source = SOURCE.parse(matches);
+            let vp_code_path = CODE_PATH_OPT.parse(matches);
+            let public_key = PUBLIC_KEY.parse(matches);
+            Self {
+                tx,
+                source,
+                vp_code_path,
+                public_key,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(SOURCE.def().about(
+                    "The source account's address that signs the transaction.",
+                ))
+                .arg(CODE_PATH_OPT.def().about(
+                    "The path to the validity predicate WASM code to be used \
+                     for the new account. Uses the default user VP if none \
+                     specified.",
+                ))
+                .arg(PUBLIC_KEY.def().about(
+                    "A public key to be used for the new account in \
+                     hexadecimal encoding.",
+                ))
+        }
+    }
+
     /// Transaction to update a VP arguments
     #[derive(Debug)]
     pub struct TxUpdateVp {
@@ -750,72 +801,54 @@ pub mod args {
     pub struct Intent {
         /// Gossip node address
         pub node_addr: String,
-        /// Path to the intent file
-        pub data_path: PathBuf,
         /// Intent topic
         pub topic: String,
+        /// Signing key
+        pub key: Address,
+        /// Exchanges description
+        pub exchanges: Vec<Exchange>,
+        /// Print output to stdout
+        pub to_stdout: bool,
     }
 
     impl Args for Intent {
         fn parse(matches: &ArgMatches) -> Self {
+            let key = SIGNING_KEY.parse(matches);
             let node_addr = NODE.parse(matches);
             let data_path = DATA_PATH.parse(matches);
+            let to_stdout = TO_STDOUT.parse(matches);
             let topic = TOPIC.parse(matches);
+
+            let file = File::open(&data_path).expect("File must exist.");
+            let exchanges: Vec<Exchange> = serde_json::from_reader(file)
+                .expect("JSON was not well-formatted");
+
             Self {
                 node_addr,
-                data_path,
                 topic,
+                key,
+                exchanges,
+                to_stdout,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(NODE.def().about("The gossip node address."))
+                .arg(SIGNING_KEY.def().about("The key to sign the intent."))
                 .arg(DATA_PATH.def().about(
                     "The data of the intent, that contains all value \
                      necessary for the matchmaker.",
+                ))
+                .arg(TO_STDOUT.def().about(
+                    "Echo the serialized intent to stdout. Note that with \
+                     this option, the intent won't be submitted to the intent \
+                     gossiper RPC.",
                 ))
                 .arg(
                     TOPIC.def().about(
                         "The subnetwork where the intent should be sent to",
                     ),
                 )
-        }
-    }
-
-    /// Craft intent for token exchange arguments
-    #[derive(Debug)]
-    pub struct CraftIntent {
-        /// Signing key
-        pub key: Address,
-        /// Exchange description
-        pub exchanges: Vec<Exchange>,
-        /// Target file path
-        pub file_path: String,
-    }
-
-    impl Args for CraftIntent {
-        fn parse(matches: &ArgMatches) -> Self {
-            let key = SIGNING_KEY.parse(matches);
-            let file_path_output = FILE_PATH_OUTPUT.parse(matches);
-            let file_path_input = FILE_PATH_INPUT.parse(matches);
-            let file = File::open(&file_path_input).expect("File must exist.");
-
-            let exchanges: Vec<Exchange> = serde_json::from_reader(file)
-                .expect("JSON was not well-formatted");
-
-            Self {
-                key,
-                exchanges,
-                file_path: file_path_output,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(SIGNING_KEY.def().about(
-                "Address of the account with key used to sign the intent.",
-            ))
-            .arg(FILE_PATH_OUTPUT.def().about("The output file"))
-            .arg(FILE_PATH_INPUT.def().about("The input file"))
         }
     }
 
