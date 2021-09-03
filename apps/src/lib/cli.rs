@@ -6,12 +6,15 @@
 //! client can be dispatched via `anoma node ...` or `anoma client ...`,
 //! respectively.
 
-use clap::{AppSettings, ArgMatches};
-
-use super::config;
+mod input;
 mod utils;
+
+use clap::{AppSettings, ArgMatches};
 pub use utils::safe_exit;
 use utils::*;
+
+use super::config;
+use crate::wallet::Wallet;
 
 const AUTHOR: &str = "Heliax AG <hello@heliax.dev>";
 const APP_NAME: &str = "Anoma";
@@ -25,11 +28,20 @@ const NODE_CMD: &str = "node";
 const CLIENT_CMD: &str = "client";
 const WALLET_CMD: &str = "wallet";
 
+/// Command and argument parsing and execution context
+#[derive(Debug)]
+pub struct Context {
+    /// Global arguments
+    pub global_args: args::Global,
+    /// The wallet
+    pub wallet: Wallet,
+}
+
 pub mod cmds {
     use clap::AppSettings;
 
     use super::utils::*;
-    use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
+    use super::{args, ArgMatches, Context, CLIENT_CMD, NODE_CMD, WALLET_CMD};
 
     /// Commands for `anoma` binary.
     #[derive(Debug)]
@@ -59,16 +71,17 @@ pub mod cmds {
                 .subcommand(Intent::def())
         }
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
-            let node = SubCmd::parse(matches).map_fst(Self::Node);
-            let client = SubCmd::parse(matches).map_fst(Self::Client);
-            let wallet = SubCmd::parse(matches).map_fst(Self::Wallet);
-            let ledger = SubCmd::parse(matches).map_fst(Self::Ledger);
-            let gossip = SubCmd::parse(matches).map_fst(Self::Gossip);
-            let tx_custom = SubCmd::parse(matches).map_fst(Self::TxCustom);
-            let tx_transfer = SubCmd::parse(matches).map_fst(Self::TxTransfer);
-            let tx_update_vp = SubCmd::parse(matches).map_fst(Self::TxUpdateVp);
-            let intent = SubCmd::parse(matches).map_fst(Self::Intent);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            let node = SubCmd::parse(ctx, matches).map(Self::Node);
+            let client = SubCmd::parse(ctx, matches).map(Self::Client);
+            let wallet = SubCmd::parse(ctx, matches).map(Self::Wallet);
+            let ledger = SubCmd::parse(ctx, matches).map(Self::Ledger);
+            let gossip = SubCmd::parse(ctx, matches).map(Self::Gossip);
+            let tx_custom = SubCmd::parse(ctx, matches).map(Self::TxCustom);
+            let tx_transfer = SubCmd::parse(ctx, matches).map(Self::TxTransfer);
+            let tx_update_vp =
+                SubCmd::parse(ctx, matches).map(Self::TxUpdateVp);
+            let intent = SubCmd::parse(ctx, matches).map(Self::Intent);
             node.or(client)
                 .or(wallet)
                 .or(ledger)
@@ -97,24 +110,21 @@ pub mod cmds {
                 .subcommand(Config::def())
         }
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
-            let ledger = SubCmd::parse(matches).map_fst(Self::Ledger);
-            let gossip = SubCmd::parse(matches)
-                .map_fst(|gossip| Self::Gossip(Box::new(gossip)));
-            let config = SubCmd::parse(matches).map_fst(Self::Config);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            let ledger = SubCmd::parse(ctx, matches).map(Self::Ledger);
+            let gossip = SubCmd::parse(ctx, matches)
+                .map(|gossip| Self::Gossip(Box::new(gossip)));
+            let config = SubCmd::parse(ctx, matches).map(Self::Config);
             ledger.or(gossip).or(config)
         }
     }
     impl SubCmd for AnomaNode {
         const CMD: &'static str = NODE_CMD;
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .and_then(|matches| <Self as Cmd>::parse(matches))
+                .and_then(|matches| <Self as Cmd>::parse(ctx, matches))
         }
 
         fn def() -> App {
@@ -150,17 +160,18 @@ pub mod cmds {
                 .subcommand(SubscribeTopic::def())
         }
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
-            let tx_custom = SubCmd::parse(matches).map_fst(Self::TxCustom);
-            let tx_transfer = SubCmd::parse(matches).map_fst(Self::TxTransfer);
-            let tx_update_vp = SubCmd::parse(matches).map_fst(Self::TxUpdateVp);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            let tx_custom = SubCmd::parse(ctx, matches).map(Self::TxCustom);
+            let tx_transfer = SubCmd::parse(ctx, matches).map(Self::TxTransfer);
+            let tx_update_vp =
+                SubCmd::parse(ctx, matches).map(Self::TxUpdateVp);
             let query_balance =
-                SubCmd::parse(matches).map_fst(Self::QueryBalance);
-            let intent = SubCmd::parse(matches).map_fst(Self::Intent);
+                SubCmd::parse(ctx, matches).map(Self::QueryBalance);
+            let intent = SubCmd::parse(ctx, matches).map(Self::Intent);
             let craft_intent =
-                SubCmd::parse(matches).map_fst(Self::CraftIntent);
+                SubCmd::parse(ctx, matches).map(Self::CraftIntent);
             let subscribe_topic =
-                SubCmd::parse(matches).map_fst(Self::SubscribeTopic);
+                SubCmd::parse(ctx, matches).map(Self::SubscribeTopic);
             tx_custom
                 .or(tx_transfer)
                 .or(tx_update_vp)
@@ -174,13 +185,10 @@ pub mod cmds {
     impl SubCmd for AnomaClient {
         const CMD: &'static str = CLIENT_CMD;
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .and_then(|matches| <Self as Cmd>::parse(matches))
+                .and_then(|matches| <Self as Cmd>::parse(ctx, matches))
         }
 
         fn def() -> App {
@@ -206,9 +214,9 @@ pub mod cmds {
                 .subcommand(WalletAddress::def())
         }
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
-            let key = SubCmd::parse(matches).map_fst(Self::Key);
-            let address = SubCmd::parse(matches).map_fst(Self::Address);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            let key = SubCmd::parse(ctx, matches).map(Self::Key);
+            let address = SubCmd::parse(ctx, matches).map(Self::Address);
             key.or(address)
         }
     }
@@ -216,13 +224,10 @@ pub mod cmds {
     impl SubCmd for AnomaWallet {
         const CMD: &'static str = WALLET_CMD;
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .and_then(|matches| <Self as Cmd>::parse(matches))
+                .and_then(|matches| <Self as Cmd>::parse(ctx, matches))
         }
 
         fn def() -> App {
@@ -245,11 +250,11 @@ pub mod cmds {
     impl SubCmd for WalletKey {
         const CMD: &'static str = "key";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let generate = SubCmd::parse(matches).map_fst(WalletKey::Gen);
-                let lookup = SubCmd::parse(matches).map_fst(WalletKey::Find);
-                let list = SubCmd::parse(matches).map_fst(WalletKey::List);
+                let generate = SubCmd::parse(ctx, matches).map(Self::Gen);
+                let lookup = SubCmd::parse(ctx, matches).map(Self::Find);
+                let list = SubCmd::parse(ctx, matches).map(Self::List);
                 generate.or(lookup).or(list)
             })
         }
@@ -273,13 +278,10 @@ pub mod cmds {
     impl SubCmd for KeyGen {
         const CMD: &'static str = "gen";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| (KeyGen(args::KeyGen::parse(matches)), matches))
+                .map(|matches| (Self(args::KeyGen::parse(ctx, matches))))
         }
 
         fn def() -> App {
@@ -295,13 +297,10 @@ pub mod cmds {
     impl SubCmd for KeyFind {
         const CMD: &'static str = "find";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                (KeyFind(args::KeyFind::parse(matches)), matches)
-            })
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Self(args::KeyFind::parse(ctx, matches))))
         }
 
         fn def() -> App {
@@ -317,13 +316,10 @@ pub mod cmds {
     impl SubCmd for KeyList {
         const CMD: &'static str = "list";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                (KeyList(args::KeyList::parse(matches)), matches)
-            })
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Self(args::KeyList::parse(ctx, matches))))
         }
 
         fn def() -> App {
@@ -339,13 +335,10 @@ pub mod cmds {
     impl SubCmd for Export {
         const CMD: &'static str = "export";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| (Export(args::Export::parse(matches)), matches))
+                .map(|matches| (Self(args::Export::parse(ctx, matches))))
         }
 
         fn def() -> App {
@@ -366,11 +359,10 @@ pub mod cmds {
     impl SubCmd for WalletAddress {
         const CMD: &'static str = "address";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
-            matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let list = SubCmd::parse(matches).map_fst(WalletAddress::List);
-                list
-            })
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .and_then(|matches| SubCmd::parse(ctx, matches).map(Self::List))
         }
 
         fn def() -> App {
@@ -390,13 +382,10 @@ pub mod cmds {
     impl SubCmd for AddressList {
         const CMD: &'static str = "list";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(_ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| (AddressList, matches))
+                .map(|_matches| AddressList)
         }
 
         fn def() -> App {
@@ -413,13 +402,13 @@ pub mod cmds {
     impl SubCmd for Ledger {
         const CMD: &'static str = "ledger";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let run = SubCmd::parse(matches).map_fst(Ledger::Run);
-                let reset = SubCmd::parse(matches).map_fst(Ledger::Reset);
+                let run = SubCmd::parse(ctx, matches).map(Self::Run);
+                let reset = SubCmd::parse(ctx, matches).map(Self::Reset);
                 run.or(reset)
                     // The `run` command is the default if no sub-command given
-                    .or(Some((Ledger::Run(LedgerRun), matches)))
+                    .or(Some(Self::Run(LedgerRun)))
             })
         }
 
@@ -440,10 +429,8 @@ pub mod cmds {
     impl SubCmd for LedgerRun {
         const CMD: &'static str = "run";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| (LedgerRun, matches))
+        fn parse(_ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|_matches| Self)
         }
 
         fn def() -> App {
@@ -457,10 +444,8 @@ pub mod cmds {
     impl SubCmd for LedgerReset {
         const CMD: &'static str = "reset";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| (LedgerReset, matches))
+        fn parse(_ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|_matches| Self)
         }
 
         fn def() -> App {
@@ -479,21 +464,15 @@ pub mod cmds {
     impl SubCmd for Gossip {
         const CMD: &'static str = "gossip";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let run = SubCmd::parse(matches).map_fst(Gossip::Run);
+                let run = SubCmd::parse(ctx, matches).map(Gossip::Run);
                 run
                     // The `run` command is the default if no sub-command given
                     .or_else(|| {
-                        Some((
-                            Gossip::Run(GossipRun(args::GossipRun::parse(
-                                matches,
-                            ))),
-                            matches,
-                        ))
+                        Some(Gossip::Run(GossipRun(args::GossipRun::parse(
+                            ctx, matches,
+                        ))))
                     })
             })
         }
@@ -515,13 +494,10 @@ pub mod cmds {
     impl SubCmd for GossipRun {
         const CMD: &'static str = "run";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                (GossipRun(args::GossipRun::parse(matches)), matches)
-            })
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| GossipRun(args::GossipRun::parse(ctx, matches)))
         }
 
         fn def() -> App {
@@ -539,14 +515,10 @@ pub mod cmds {
     impl SubCmd for Config {
         const CMD: &'static str = "config";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
-            matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let gen = SubCmd::parse(matches).map_fst(Self::Gen);
-                gen
-            })
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .and_then(|matches| SubCmd::parse(ctx, matches).map(Self::Gen))
         }
 
         fn def() -> App {
@@ -563,13 +535,8 @@ pub mod cmds {
     impl SubCmd for ConfigGen {
         const CMD: &'static str = "gen";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| (Self, matches))
+        fn parse(_ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|_matches| Self)
         }
 
         fn def() -> App {
@@ -583,10 +550,10 @@ pub mod cmds {
     impl SubCmd for TxCustom {
         const CMD: &'static str = "tx";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                (TxCustom(args::TxCustom::parse(matches)), matches)
-            })
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| TxCustom(args::TxCustom::parse(ctx, matches)))
         }
 
         fn def() -> App {
@@ -602,12 +569,9 @@ pub mod cmds {
     impl SubCmd for TxTransfer {
         const CMD: &'static str = "transfer";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                (TxTransfer(args::TxTransfer::parse(matches)), matches)
+                TxTransfer(args::TxTransfer::parse(ctx, matches))
             })
         }
 
@@ -624,12 +588,9 @@ pub mod cmds {
     impl SubCmd for TxUpdateVp {
         const CMD: &'static str = "update";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                (TxUpdateVp(args::TxUpdateVp::parse(matches)), matches)
+                TxUpdateVp(args::TxUpdateVp::parse(ctx, matches))
             })
         }
 
@@ -649,12 +610,9 @@ pub mod cmds {
     impl SubCmd for QueryBalance {
         const CMD: &'static str = "balance";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                (QueryBalance(args::QueryBalance::parse(matches)), matches)
+                QueryBalance(args::QueryBalance::parse(ctx, matches))
             })
         }
 
@@ -671,13 +629,10 @@ pub mod cmds {
     impl SubCmd for Intent {
         const CMD: &'static str = "intent";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| (Intent(args::Intent::parse(matches)), matches))
+                .map(|matches| Intent(args::Intent::parse(ctx, matches)))
         }
 
         fn def() -> App {
@@ -693,12 +648,9 @@ pub mod cmds {
     impl SubCmd for CraftIntent {
         const CMD: &'static str = "craft-intent";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                (CraftIntent(args::CraftIntent::parse(matches)), matches)
+                CraftIntent(args::CraftIntent::parse(ctx, matches))
             })
         }
 
@@ -715,15 +667,9 @@ pub mod cmds {
     impl SubCmd for SubscribeTopic {
         const CMD: &'static str = "subscribe-topic";
 
-        fn parse(matches: &ArgMatches) -> Option<(Self, &ArgMatches)>
-        where
-            Self: Sized,
-        {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                (
-                    SubscribeTopic(args::SubscribeTopic::parse(matches)),
-                    matches,
-                )
+                SubscribeTopic(args::SubscribeTopic::parse(ctx, matches))
             })
         }
 
@@ -747,7 +693,7 @@ pub mod args {
     use libp2p::Multiaddr;
 
     use super::utils::*;
-    use super::ArgMatches;
+    use super::{ArgMatches, Context};
 
     const ADDRESS: Arg<Address> = arg("address");
     const ALIAS: ArgOpt<String> = arg_opt("alias");
@@ -801,13 +747,16 @@ pub mod args {
         pub base_dir: PathBuf,
     }
 
-    impl Args for Global {
-        fn parse(matches: &ArgMatches) -> Self {
-            let base_dir = BASE_DIR.parse(matches);
+    impl Global {
+        /// Parse global arguments
+        pub fn parse(matches: &ArgMatches) -> Self {
+            let base_dir = BASE_DIR.parse_global(matches);
             Global { base_dir }
         }
 
-        fn def(app: App) -> App {
+        /// Add global args definition. Should be added to every top-level
+        /// command.
+        pub fn def(app: App) -> App {
             app.arg(BASE_DIR.def().about(
                 "The base directory is where the client and nodes \
                  configuration and state is stored.",
@@ -821,8 +770,8 @@ pub mod args {
     }
 
     impl Args for Export {
-        fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(ctx, matches);
 
             Self { alias }
         }
@@ -846,10 +795,10 @@ pub mod args {
     }
 
     impl Args for TxCustom {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let code_path = CODE_PATH.parse(matches);
-            let data_path = DATA_PATH_OPT.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(ctx, matches);
+            let code_path = CODE_PATH.parse(ctx, matches);
+            let data_path = DATA_PATH_OPT.parse(ctx, matches);
             Self {
                 tx,
                 code_path,
@@ -888,12 +837,12 @@ pub mod args {
     }
 
     impl Args for TxTransfer {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let source = SOURCE.parse(matches);
-            let target = TARGET.parse(matches);
-            let token = TOKEN.parse(matches);
-            let amount = AMOUNT.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(ctx, matches);
+            let source = SOURCE.parse(ctx, matches);
+            let target = TARGET.parse(ctx, matches);
+            let token = TOKEN.parse(ctx, matches);
+            let amount = AMOUNT.parse(ctx, matches);
             Self {
                 tx,
                 source,
@@ -927,10 +876,10 @@ pub mod args {
     }
 
     impl Args for TxUpdateVp {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let vp_code_path = CODE_PATH.parse(matches);
-            let addr = ADDRESS.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(ctx, matches);
+            let vp_code_path = CODE_PATH.parse(ctx, matches);
+            let addr = ADDRESS.parse(ctx, matches);
             Self {
                 tx,
                 vp_code_path,
@@ -964,10 +913,10 @@ pub mod args {
     }
 
     impl Args for QueryBalance {
-        fn parse(matches: &ArgMatches) -> Self {
-            let query = Query::parse(matches);
-            let owner = OWNER.parse(matches);
-            let token = TOKEN_OPT.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let query = Query::parse(ctx, matches);
+            let owner = OWNER.parse(ctx, matches);
+            let token = TOKEN_OPT.parse(ctx, matches);
             Self {
                 query,
                 owner,
@@ -1002,10 +951,10 @@ pub mod args {
     }
 
     impl Args for Intent {
-        fn parse(matches: &ArgMatches) -> Self {
-            let node_addr = NODE.parse(matches);
-            let data_path = DATA_PATH.parse(matches);
-            let topic = TOPIC.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let node_addr = NODE.parse(ctx, matches);
+            let data_path = DATA_PATH.parse(ctx, matches);
+            let topic = TOPIC.parse(ctx, matches);
             Self {
                 node_addr,
                 data_path,
@@ -1039,10 +988,10 @@ pub mod args {
     }
 
     impl Args for CraftIntent {
-        fn parse(matches: &ArgMatches) -> Self {
-            let key = SIGNING_KEY.parse(matches);
-            let file_path_output = FILE_PATH_OUTPUT.parse(matches);
-            let file_path_input = FILE_PATH_INPUT.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let key = SIGNING_KEY.parse(ctx, matches);
+            let file_path_output = FILE_PATH_OUTPUT.parse(ctx, matches);
+            let file_path_input = FILE_PATH_INPUT.parse(ctx, matches);
             let file = File::open(&file_path_input).expect("File must exist.");
 
             let exchanges: Vec<Exchange> = serde_json::from_reader(file)
@@ -1074,9 +1023,9 @@ pub mod args {
     }
 
     impl Args for SubscribeTopic {
-        fn parse(matches: &ArgMatches) -> Self {
-            let node_addr = NODE.parse(matches);
-            let topic = TOPIC.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let node_addr = NODE.parse(ctx, matches);
+            let topic = TOPIC.parse(ctx, matches);
             Self { node_addr, topic }
         }
 
@@ -1102,15 +1051,15 @@ pub mod args {
     }
 
     impl Args for GossipRun {
-        fn parse(matches: &ArgMatches) -> Self {
-            let addr = MULTIADDR_OPT.parse(matches);
-            let peers = PEERS.parse(matches);
-            let topics = TOPICS.parse(matches);
-            let rpc = RPC_SOCKET_ADDR.parse(matches);
-            let matchmaker_path = MATCHMAKER_PATH.parse(matches);
-            let tx_code_path = TX_CODE_PATH.parse(matches);
-            let ledger_addr = LEDGER_ADDRESS_OPT.parse(matches);
-            let filter_path = FILTER_PATH.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let addr = MULTIADDR_OPT.parse(ctx, matches);
+            let peers = PEERS.parse(ctx, matches);
+            let topics = TOPICS.parse(ctx, matches);
+            let rpc = RPC_SOCKET_ADDR.parse(ctx, matches);
+            let matchmaker_path = MATCHMAKER_PATH.parse(ctx, matches);
+            let tx_code_path = TX_CODE_PATH.parse(ctx, matches);
+            let ledger_addr = LEDGER_ADDRESS_OPT.parse(ctx, matches);
+            let filter_path = FILTER_PATH.parse(ctx, matches);
             Self {
                 addr,
                 peers,
@@ -1170,9 +1119,9 @@ pub mod args {
             .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
         }
 
-        fn parse(matches: &ArgMatches) -> Self {
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
-            let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
+            let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(ctx, matches);
             Self {
                 dry_run,
                 ledger_address,
@@ -1192,8 +1141,8 @@ pub mod args {
             app.arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
         }
 
-        fn parse(matches: &ArgMatches) -> Self {
-            let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(ctx, matches);
             Self { ledger_address }
         }
     }
@@ -1208,8 +1157,8 @@ pub mod args {
     }
 
     impl Args for KeyGen {
-        fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(ctx, matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
@@ -1239,10 +1188,10 @@ pub mod args {
     }
 
     impl Args for KeyFind {
-        fn parse(matches: &ArgMatches) -> Self {
-            let public_key = PUBLIC_KEY.parse(matches);
-            let alias = ALIAS.parse(matches);
-            let value = VALUE.parse(matches);
+        fn parse(ctx: &Context, matches: &ArgMatches) -> Self {
+            let public_key = PUBLIC_KEY.parse(ctx, matches);
+            let alias = ALIAS.parse(ctx, matches);
+            let value = VALUE.parse(ctx, matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
 
             Self {
@@ -1288,7 +1237,7 @@ pub mod args {
     }
 
     impl Args for KeyList {
-        fn parse(matches: &ArgMatches) -> Self {
+        fn parse(_ctx: &Context, matches: &ArgMatches) -> Self {
             let decrypt = DECRYPT.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
@@ -1312,9 +1261,15 @@ pub fn anoma_cli() -> (cmds::Anoma, String) {
     let matches = app.get_matches();
     let raw_sub_cmd =
         matches.subcommand().map(|(raw, _matches)| raw.to_string());
-    let result = cmds::Anoma::parse(&matches);
+    let global_args = args::Global::parse(&matches);
+    let wallet = Wallet::load_or_new(&global_args.base_dir);
+    let context = Context {
+        global_args,
+        wallet,
+    };
+    let result = cmds::Anoma::parse(&context, &matches);
     match (result, raw_sub_cmd) {
-        (Some((cmd, _)), Some(raw_sub)) => return (cmd, raw_sub),
+        (Some(cmd), Some(raw_sub)) => return (cmd, raw_sub),
         _ => {
             anoma_app().print_help().unwrap();
         }
@@ -1322,22 +1277,19 @@ pub fn anoma_cli() -> (cmds::Anoma, String) {
     safe_exit(2);
 }
 
-pub fn anoma_node_cli() -> (cmds::AnomaNode, args::Global) {
+pub fn anoma_node_cli() -> (cmds::AnomaNode, Context) {
     let app = anoma_node_app();
-    let (cmd, matches) = cmds::AnomaNode::parse_or_print_help(app);
-    (cmd, args::Global::parse(&matches))
+    cmds::AnomaNode::parse_or_print_help(app)
 }
 
-pub fn anoma_client_cli() -> (cmds::AnomaClient, args::Global) {
+pub fn anoma_client_cli() -> (cmds::AnomaClient, Context) {
     let app = anoma_client_app();
-    let (cmd, matches) = cmds::AnomaClient::parse_or_print_help(app);
-    (cmd, args::Global::parse(&matches))
+    cmds::AnomaClient::parse_or_print_help(app)
 }
 
-pub fn anoma_wallet_cli() -> (cmds::AnomaWallet, args::Global) {
+pub fn anoma_wallet_cli() -> (cmds::AnomaWallet, Context) {
     let app = anoma_wallet_app();
-    let (cmd, matches) = cmds::AnomaWallet::parse_or_print_help(app);
-    (cmd, args::Global::parse(&matches))
+    cmds::AnomaWallet::parse_or_print_help(app)
 }
 
 fn anoma_app() -> App {
@@ -1345,9 +1297,8 @@ fn anoma_app() -> App {
         .version(CLI_VERSION)
         .author(AUTHOR)
         .about("Anoma command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .add_args::<args::Global>();
-    cmds::Anoma::add_sub(app)
+        .setting(AppSettings::SubcommandRequiredElseHelp);
+    cmds::Anoma::add_sub(args::Global::def(app))
 }
 
 fn anoma_node_app() -> App {
@@ -1355,9 +1306,8 @@ fn anoma_node_app() -> App {
         .version(CLIENT_VERSION)
         .author(AUTHOR)
         .about("Anoma client command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .add_args::<args::Global>();
-    cmds::AnomaNode::add_sub(app)
+        .setting(AppSettings::SubcommandRequiredElseHelp);
+    cmds::AnomaNode::add_sub(args::Global::def(app))
 }
 
 fn anoma_client_app() -> App {
@@ -1365,9 +1315,8 @@ fn anoma_client_app() -> App {
         .version(NODE_VERSION)
         .author(AUTHOR)
         .about("Anoma node command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .add_args::<args::Global>();
-    cmds::AnomaClient::add_sub(app)
+        .setting(AppSettings::SubcommandRequiredElseHelp);
+    cmds::AnomaClient::add_sub(args::Global::def(app))
 }
 
 fn anoma_wallet_app() -> App {
@@ -1375,9 +1324,8 @@ fn anoma_wallet_app() -> App {
         .version(WALLET_VERSION)
         .author(AUTHOR)
         .about("Anoma wallet command line interface.")
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .add_args::<args::Global>();
-    cmds::AnomaWallet::add_sub(app)
+        .setting(AppSettings::SubcommandRequiredElseHelp);
+    cmds::AnomaWallet::add_sub(args::Global::def(app))
 }
 
 pub fn update_gossip_config(

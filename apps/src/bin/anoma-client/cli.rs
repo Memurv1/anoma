@@ -6,7 +6,7 @@ use std::io::Write;
 
 use anoma::types::intent::{Exchange, FungibleTokenIntent};
 use anoma::types::key::ed25519::Signed;
-use anoma_apps::cli::{args, cmds};
+use anoma_apps::cli::{args, cmds, Context};
 use anoma_apps::client::{rpc, tx};
 use anoma_apps::proto::services::rpc_service_client::RpcServiceClient;
 use anoma_apps::proto::{services, RpcMessage};
@@ -15,35 +15,35 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 
 pub async fn main() -> Result<()> {
-    let (cmd, global_args) = cli::anoma_client_cli();
+    let (cmd, ctx) = cli::anoma_client_cli();
     match cmd {
         cmds::AnomaClient::TxCustom(cmds::TxCustom(args)) => {
-            tx::submit_custom(global_args, args).await;
+            tx::submit_custom(&ctx, args).await;
         }
         cmds::AnomaClient::TxTransfer(cmds::TxTransfer(args)) => {
-            tx::submit_transfer(global_args, args).await;
+            tx::submit_transfer(&ctx, args).await;
         }
         cmds::AnomaClient::TxUpdateVp(cmds::TxUpdateVp(args)) => {
-            tx::submit_update_vp(global_args, args).await;
+            tx::submit_update_vp(&ctx, args).await;
         }
         cmds::AnomaClient::QueryBalance(cmds::QueryBalance(args)) => {
-            rpc::query_balance(global_args, args).await;
+            rpc::query_balance(&ctx, args).await;
         }
         cmds::AnomaClient::Intent(cmds::Intent(args)) => {
-            gossip_intent(global_args, args).await;
+            gossip_intent(&ctx, args).await;
         }
         cmds::AnomaClient::CraftIntent(cmds::CraftIntent(args)) => {
-            craft_intent(global_args, args);
+            craft_intent(&ctx, args);
         }
         cmds::AnomaClient::SubscribeTopic(cmds::SubscribeTopic(args)) => {
-            subscribe_topic(global_args, args).await;
+            subscribe_topic(&ctx, args).await;
         }
     }
     Ok(())
 }
 
 async fn gossip_intent(
-    _global_args: args::Global,
+    _ctx: &Context,
     args::Intent {
         node_addr,
         data_path,
@@ -63,7 +63,7 @@ async fn gossip_intent(
 }
 
 async fn subscribe_topic(
-    _global_args: args::Global,
+    _ctx: &Context,
     args::SubscribeTopic { node_addr, topic }: args::SubscribeTopic,
 ) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
@@ -76,7 +76,7 @@ async fn subscribe_topic(
 }
 
 fn craft_intent(
-    _global_args: args::Global,
+    _ctx: &Context,
     args::CraftIntent {
         key,
         exchanges,
