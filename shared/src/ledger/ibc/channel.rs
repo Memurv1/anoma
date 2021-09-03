@@ -139,7 +139,6 @@ where
         }
     }
 
-    /// Returns the port ID and the channel ID
     pub(super) fn get_port_channel_id(
         key: &Key,
     ) -> Result<(PortId, ChannelId)> {
