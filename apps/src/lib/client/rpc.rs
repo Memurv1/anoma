@@ -3,11 +3,13 @@
 use std::borrow::Cow;
 use std::io::{self, Write};
 
+use anoma::types::address::Address;
+use anoma::types::key::ed25519;
 use anoma::types::{address, storage, token};
 use borsh::BorshDeserialize;
 use tendermint_rpc::{Client, HttpClient};
 
-use crate::cli::args;
+use crate::cli::{self, args};
 use crate::node::ledger::rpc::{Path, PrefixValue};
 
 /// Dry run a transaction
@@ -25,9 +27,13 @@ pub async fn dry_run_tx(
 }
 
 /// Query token balance(s)
-pub async fn query_balance(args: args::QueryBalance) {
+pub async fn query_balance(
+    _global_args: args::Global,
+    args: args::QueryBalance,
+) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     let tokens = address::tokens();
+    // TODO look-up addresses from the wallet if not raw
     match (args.token.as_ref(), args.owner.as_ref()) {
         (Some(token), Some(owner)) => {
             let key = token::balance_key(token, owner);
@@ -80,6 +86,18 @@ pub async fn query_balance(args: args::QueryBalance) {
     }
 }
 
+/// Get account's public key stored in its storage sub-space
+pub async fn get_public_key(
+    address: &Address,
+    ledger_address: tendermint::net::Address,
+) -> Option<ed25519::PublicKey> {
+    let client = HttpClient::new(ledger_address).unwrap();
+    let key = ed25519::pk_key(address);
+    // TODO `query_storage_value` is updated in PoS branch to return option,
+    // once merged, we can remove this `Some`
+    Some(query_storage_value(client, key).await)
+}
+
 /// Query a storage value and decode it with [`BorshDeserialize`].
 async fn query_storage_value<T>(client: HttpClient, key: storage::Key) -> T
 where
@@ -103,7 +121,7 @@ where
             response.info, err
         ),
     }
-    std::process::exit(1);
+    cli::safe_exit(1)
 }
 
 /// Query a range of storage values with a matching prefix and decode them with
@@ -149,5 +167,5 @@ where
             response.info, err
         ),
     }
-    std::process::exit(1);
+    cli::safe_exit(1)
 }

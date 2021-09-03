@@ -15,34 +15,35 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 
 pub async fn main() -> Result<()> {
-    let (cmd, _global_args) = cli::anoma_client_cli();
+    let (cmd, global_args) = cli::anoma_client_cli();
     match cmd {
         cmds::AnomaClient::TxCustom(cmds::TxCustom(args)) => {
-            tx::submit_custom(args).await;
+            tx::submit_custom(global_args, args).await;
         }
         cmds::AnomaClient::TxTransfer(cmds::TxTransfer(args)) => {
-            tx::submit_transfer(args).await;
+            tx::submit_transfer(global_args, args).await;
         }
         cmds::AnomaClient::TxUpdateVp(cmds::TxUpdateVp(args)) => {
-            tx::submit_update_vp(args).await;
+            tx::submit_update_vp(global_args, args).await;
         }
         cmds::AnomaClient::QueryBalance(cmds::QueryBalance(args)) => {
-            rpc::query_balance(args).await;
+            rpc::query_balance(global_args, args).await;
         }
         cmds::AnomaClient::Intent(cmds::Intent(args)) => {
-            gossip_intent(args).await;
+            gossip_intent(global_args, args).await;
         }
         cmds::AnomaClient::CraftIntent(cmds::CraftIntent(args)) => {
-            craft_intent(args);
+            craft_intent(global_args, args);
         }
         cmds::AnomaClient::SubscribeTopic(cmds::SubscribeTopic(args)) => {
-            subscribe_topic(args).await;
+            subscribe_topic(global_args, args).await;
         }
     }
     Ok(())
 }
 
 async fn gossip_intent(
+    global_args: args::Global,
     args::Intent {
         node_addr,
         data_path,
@@ -62,6 +63,7 @@ async fn gossip_intent(
 }
 
 async fn subscribe_topic(
+    global_args: args::Global,
     args::SubscribeTopic { node_addr, topic }: args::SubscribeTopic,
 ) {
     let mut client = RpcServiceClient::connect(node_addr).await.unwrap();
@@ -74,6 +76,7 @@ async fn subscribe_topic(
 }
 
 fn craft_intent(
+    global_args: args::Global,
     args::CraftIntent {
         key,
         exchanges,
